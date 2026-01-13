@@ -19,8 +19,16 @@ struct VideoPlaybackView: View {
     @State private var observer: NSObjectProtocol?
     @State private var playerError: String?
     @State private var statusObserver: NSKeyValueObservation?
+    @State private var timeObserverToken: Any?
+    @State private var currentTimeSeconds: Double = 0
+    @State private var durationSeconds: Double = 0
+    @State private var isScrubbing = false
+    @State private var wasPlayingBeforeScrub = false
+    @State private var showOverlayControls = true
+    @State private var overlayAutoHideWorkItem: DispatchWorkItem?
     
     @State private var isUploading = false
+    @State private var uploadProgress: Double = 0.0
     @State private var uploadStatus: String?
     @State private var uploadError: String?
     @State private var objFileURL: URL?
@@ -32,84 +40,82 @@ struct VideoPlaybackView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            
-            VStack {
-                // Top bar with close button
-                HStack {
-                    Button(action: {
-                        player?.pause()
-                        // Navigate back to welcome screen
-                        // Dismiss current view first
-                        dismiss()
-                        close()
-                        
-                        // If we came from CameraRecordView (via navigationDestination),
-                        // we need to dismiss that too to get back to WelcomeView
-                        // Use a small delay to ensure the first dismiss completes
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            presentationMode.wrappedValue.dismiss()
-                        }
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white)
-                            .background(Color.black.opacity(0.3))
-                            .clipShape(Circle())
-                    }
-                    .padding()
-                    
-                    Spacer()
-                    
-                    // View 3D Model button (only show if .obj file is available)
-//                    if let objURL = objFileURL {
-//                        Button(action: {
-//                            show3DViewer = true
-//                        }) {
-//                            HStack(spacing: 6) {
-//                                Image(systemName: "cube.fill")
-//                                    .font(.system(size: 18, weight: .bold))
-//                                Text("VIEW 3D")
-//                                    .font(.system(size: 16, weight: .semibold))
-//                            }
-//                            .padding(.horizontal, 14)
-//                            .padding(.vertical, 10)
-//                            .background(Color.green.opacity(0.85))
-//                            .foregroundColor(.white)
-//                            .cornerRadius(12)
-//                        }
-//                        .padding(.trailing, 8)
-//                    }
-                    
-                    
-                        Button(action: {
-                            uploadData()
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.up.circle.fill")
-                                    .font(.system(size: 20, weight: .bold))
-                                Text("Upload")
-                                    .font(.system(size: 16, weight: .semibold))
+
+            // Fullscreen video / error / loading
+            Group {
+                if let player = player, playerError == nil {
+                    ZStack {
+                        VideoPlayerView(player: player)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    showOverlayControls.toggle()
+                                }
+                                if showOverlayControls {
+                                    scheduleOverlayAutoHide()
+                                }
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(isUploading ? Color.blue.opacity(0.4) :  Color.blue.opacity(0.85))
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
+
+                        // Overlay controls (center play/pause + bottom scrubber)
+                        if showOverlayControls {
+                            ZStack {
+                                // Center play/pause
+                                Button(action: {
+                                    togglePlayPause()
+                                }) {
+                                    Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                        .font(.system(size: 78))
+                                        .foregroundColor(.white)
+                                        .shadow(radius: 10)
+                                }
+
+                                // Bottom scrub bar
+                                VStack {
+                                    Spacer()
+
+                                    VStack(spacing: 10) {
+                                        HStack {
+                                            Text(formatTime(currentTimeSeconds))
+                                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                                .foregroundColor(.white.opacity(0.95))
+
+                                            Spacer()
+
+                                            Text(formatTime(durationSeconds))
+                                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                                .foregroundColor(.white.opacity(0.95))
+                                        }
+
+                                        Slider(
+                                            value: Binding(
+                                                get: { min(max(currentTimeSeconds, 0), max(durationSeconds, 0)) },
+                                                set: { newValue in
+                                                    currentTimeSeconds = newValue
+                                                }
+                                            ),
+                                            in: 0...(durationSeconds > 0 ? durationSeconds : 1)
+                                        ) { editing in
+                                            handleScrub(editing: editing)
+                                        }
+                                        .tint(.white)
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                                    .background(Color.black.opacity(0.60))
+                                    .cornerRadius(14)
+                                    .padding(.horizontal, 16)
+                                    .padding(.bottom, 22)
+                                }
+                            }
+                            .transition(.opacity)
+                            .onAppear {
+                                scheduleOverlayAutoHide()
+                            }
                         }
-                        .padding(.trailing, 12)
-                        .disabled(isUploading)
-                   
-                }
-                .padding(.top, 50)
-                
-                Spacer()
-                
-                // Video Player
-                if let player = player {
-                    VideoPlayerView(player: player)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 } else if let error = playerError {
-                    VStack(spacing: 20) {
+                    VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.system(size: 50))
                             .foregroundColor(.red)
@@ -118,52 +124,74 @@ struct VideoPlaybackView: View {
                         Text(error)
                             .font(.caption)
                             .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ProgressView()
                         .tint(.white)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                
-                Spacer()
-                
-                // Play/Pause controls
-                HStack(spacing: 40) {
+            }
+
+            // Top/Bottom chrome
+            VStack {
+                // Top bar with close + upload
+                HStack {
                     Button(action: {
-                        guard let player = player else { return }
-                        
-                        if isPlaying {
-                            player.pause()
-                            isPlaying = false
-                        } else {
-                            player.play()
-                            isPlaying = true
+                        player?.pause()
+                        dismiss()
+                        close()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            presentationMode.wrappedValue.dismiss()
                         }
                     }) {
-                        Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 70))
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(.white)
+                            .background(Color.black.opacity(0.35))
+                            .clipShape(Circle())
+                    }
+                    .padding(.leading, 16)
+                    .padding(.vertical, 10)
+
+                    Spacer()
+
+                    Button(action: {
+                        uploadData()
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 20, weight: .bold))
+                            Text("Upload")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(isUploading ? Color.blue.opacity(0.45) : Color.blue.opacity(0.90))
+                        .foregroundColor(.white)
+                        .cornerRadius(14)
+                        .shadow(radius: 6)
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.vertical, 10)
+                    .disabled(isUploading)
+                }
+                .padding(.top, 44)
+
+                Spacer()
+
+                if isUploading {
+                    VStack(spacing: 8) {
+                        ProgressView(value: uploadProgress, total: 1.0)
+                            .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                            .frame(maxWidth: 240)
+                        Text("Uploading… \(Int(uploadProgress * 100))%")
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
                             .foregroundColor(.white)
                     }
-                }
-                .padding(.bottom, 50)
-                
-                // Upload status
-               /* if let uploadStatus = uploadStatus {
-                    Text(uploadStatus)
-                        .font(.footnote)
-                        .foregroundColor(.green)
-                        .padding(.bottom, 12)
-                } else if let uploadError = uploadError {
-                    Text(uploadError)
-                        .font(.footnote)
-                        .foregroundColor(.red)
-                        .padding(.bottom, 12)
-                } else
-                */
-                
-                if isUploading {
-                    ProgressView("Uploading…")
-                        .tint(.white)
-                        .padding(.bottom, 12)
+                    .padding(.bottom, 12)
                 } else if isDownloadingModel {
                     ProgressView("Downloading 3D model…")
                         .tint(.white)
@@ -187,6 +215,9 @@ struct VideoPlaybackView: View {
                 NotificationCenter.default.removeObserver(observer)
             }
             statusObserver?.invalidate()
+            removeTimeObserver()
+            overlayAutoHideWorkItem?.cancel()
+            overlayAutoHideWorkItem = nil
             player?.pause()
             player = nil
         }
@@ -215,33 +246,7 @@ struct VideoPlaybackView: View {
         let playerItem = AVPlayerItem(asset: asset)
         let newPlayer = AVPlayer(playerItem: playerItem)
         player = newPlayer
-        
-        // Apply video transform to rotate 90 degrees if needed
-        Task {
-            do {
-                let tracks = try await asset.loadTracks(withMediaType: .video)
-                if let videoTrack = tracks.first {
-                    let naturalSize = try await videoTrack.load(.naturalSize)
-                    let preferredTransform = try await videoTrack.load(.preferredTransform)
-                    
-                    // Check if video is portrait (height > width)
-                    let isPortrait = naturalSize.height > naturalSize.width
-                    
-                    if isPortrait {
-                        // Rotate 90 degrees clockwise
-                        let rotation = CGAffineTransform(rotationAngle: .pi / 2)
-                        let translation = CGAffineTransform(translationX: naturalSize.height, y: 0)
-                        let newTransform = rotation.concatenating(translation)
-                        
-                        // Apply transform to the track
-                        try await videoTrack.load(.preferredTransform)
-                        // Note: We can't directly modify preferredTransform, so we'll handle it in the view
-                    }
-                }
-            } catch {
-                print("Error checking video transform: \(error.localizedDescription)")
-            }
-        }
+        isPlaying = false
         
         // Check player item status periodically
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -269,6 +274,7 @@ struct VideoPlaybackView: View {
         
         player?.play()
         isPlaying = true
+        startTimeObserverIfNeeded()
         
         // Set up notification observer for when video ends
         if let player = player {
@@ -279,6 +285,10 @@ struct VideoPlaybackView: View {
             ) { _ in
                 player.seek(to: .zero)
                 isPlaying = false
+                currentTimeSeconds = 0
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    showOverlayControls = true
+                }
             }
         }
     }
@@ -288,6 +298,8 @@ struct VideoPlaybackView: View {
         case .readyToPlay:
             print("Video player ready to play")
             playerError = nil
+            updateDuration()
+            startTimeObserverIfNeeded()
         case .failed:
             let errorMsg = playerItem.error?.localizedDescription ?? "Unknown error"
             print("ERROR: Video player failed - \(errorMsg)")
@@ -303,12 +315,102 @@ struct VideoPlaybackView: View {
         }
     }
     
+    // MARK: - Overlay controls helpers
+    
+    private func togglePlayPause() {
+        guard let player = player else { return }
+        if isPlaying {
+            player.pause()
+            isPlaying = false
+        } else {
+            player.play()
+            isPlaying = true
+        }
+        scheduleOverlayAutoHide()
+    }
+    
+    private func scheduleOverlayAutoHide() {
+        overlayAutoHideWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            DispatchQueue.main.async {
+                // Only auto-hide if actively playing and not scrubbing.
+                if isPlaying && !isScrubbing {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showOverlayControls = false
+                    }
+                }
+            }
+        }
+        overlayAutoHideWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: workItem)
+    }
+    
+    private func handleScrub(editing: Bool) {
+        guard let player = player else { return }
+        if editing {
+            isScrubbing = true
+            wasPlayingBeforeScrub = isPlaying
+            player.pause()
+            isPlaying = false
+            overlayAutoHideWorkItem?.cancel()
+        } else {
+            let target = CMTime(seconds: currentTimeSeconds, preferredTimescale: 600)
+            player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                if wasPlayingBeforeScrub {
+                    player.play()
+                    isPlaying = true
+                }
+                isScrubbing = false
+                scheduleOverlayAutoHide()
+            }
+        }
+    }
+    
+    private func startTimeObserverIfNeeded() {
+        guard timeObserverToken == nil, let player = player else { return }
+        
+        // Update 4x per second for smooth scrub UI
+        let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
+        timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
+            guard !isScrubbing else { return }
+            let seconds = CMTimeGetSeconds(time)
+            if seconds.isFinite {
+                currentTimeSeconds = seconds
+            }
+            updateDuration()
+        }
+    }
+    
+    private func removeTimeObserver() {
+        if let token = timeObserverToken, let player = player {
+            player.removeTimeObserver(token)
+        }
+        timeObserverToken = nil
+    }
+    
+    private func updateDuration() {
+        guard let item = player?.currentItem else { return }
+        let d = CMTimeGetSeconds(item.duration)
+        if d.isFinite && d > 0 {
+            durationSeconds = d
+        }
+    }
+    
+    private func formatTime(_ seconds: Double) -> String {
+        guard seconds.isFinite && seconds >= 0 else { return "00:00" }
+        let total = Int(seconds.rounded(.down))
+        let mins = total / 60
+        let secs = total % 60
+        return String(format: "%02d:%02d", mins, secs)
+    }
+    
     // MARK: - Upload
     @StateObject private var apiService = APIService.shared
     
     private func uploadData() {
         uploadStatus = nil
         uploadError = nil
+        uploadProgress = 0.0
         
         guard let depthURL = depthURL else {
             uploadError = "Depth JSON not found."
@@ -317,7 +419,9 @@ struct VideoPlaybackView: View {
         
         isUploading = true
         
-        apiService.uploadFiles(videoURL: videoURL, jsonURL: depthURL) { result in
+        apiService.uploadFiles(videoURL: videoURL, jsonURL: depthURL, progress: { progress in
+            self.uploadProgress = progress
+        }) { result in
             DispatchQueue.main.async {
                 isUploading = false
                 
@@ -326,6 +430,7 @@ struct VideoPlaybackView: View {
                     uploadStatus = "Uploaded successfully: \(responseString)"
                     print("📥 API Response: \(responseString)")
                     serverMessage = "success"
+                    uploadProgress = 1.0
                     // Delete all files after successful upload
                     self.deleteRecordingFiles()
                     
@@ -523,24 +628,33 @@ struct VideoPlaybackView: View {
     }
 }
 
-// Custom Video Player View that locks orientation and rotates video
+// Custom Video Player View:
+// - Keeps the app UI in portrait
+// - Rotates ONLY the preview layer when the *encoded* video is landscape
+// - Does NOT modify the recorded file (upload stays consistent with depth/intrinsics)
 struct VideoPlayerView: UIViewControllerRepresentable {
     let player: AVPlayer
     
-    func makeUIViewController(context: Context) -> PortraitLockedPlayerViewController {
-        let controller = PortraitLockedPlayerViewController()
+    func makeUIViewController(context: Context) -> RotatingPlayerViewController {
+        let controller = RotatingPlayerViewController()
         controller.player = player
-        
-       // controller.showsPlaybackControls = true
         return controller
     }
     
-    func updateUIViewController(_ uiViewController: PortraitLockedPlayerViewController, context: Context) {
+    func updateUIViewController(_ uiViewController: RotatingPlayerViewController, context: Context) {
         uiViewController.player = player
     }
 }
 
-class PortraitLockedPlayerViewController: AVPlayerViewController {
+final class RotatingPlayerViewController: UIViewController {
+    private let playerLayer = AVPlayerLayer()
+    
+    var player: AVPlayer? {
+        didSet {
+            playerLayer.player = player
+            updateLayerLayoutAndRotation()
+        }
+    }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         return .portrait
@@ -556,10 +670,49 @@ class PortraitLockedPlayerViewController: AVPlayerViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        // AVPlayerViewController already handles orientation
-        videoGravity = .resizeAspect
-        showsPlaybackControls = true
+        view.backgroundColor = .black
+        
+        // Fill the screen (cropping a bit is preferable to huge black bars)
+        playerLayer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(playerLayer)
+    }
+    
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updateLayerLayoutAndRotation()
+    }
+    
+    private func updateLayerLayoutAndRotation() {
+        let viewBounds = view.bounds
+        guard viewBounds.width > 0, viewBounds.height > 0 else { return }
+        
+        // Default: no rotation
+        var shouldRotateForPortraitPreview = false
+        
+        if let asset = player?.currentItem?.asset,
+           let track = asset.tracks(withMediaType: .video).first {
+            let naturalSize = track.naturalSize
+            let preferredTransform = track.preferredTransform
+            let transformedSize = naturalSize.applying(preferredTransform)
+            
+            let w = abs(transformedSize.width)
+            let h = abs(transformedSize.height)
+            
+            // If the encoded video is landscape but UI is portrait, rotate the preview.
+            if w > h && viewBounds.height > viewBounds.width {
+                shouldRotateForPortraitPreview = true
+            }
+        }
+        
+        if shouldRotateForPortraitPreview {
+            // Use bounds+position so rotation stays centered and fills the view.
+            playerLayer.bounds = CGRect(origin: .zero, size: CGSize(width: viewBounds.height, height: viewBounds.width))
+            playerLayer.position = CGPoint(x: viewBounds.midX, y: viewBounds.midY)
+            playerLayer.transform = CATransform3DMakeRotation(.pi / 2, 0, 0, 1)
+        } else {
+            playerLayer.transform = CATransform3DIdentity
+            playerLayer.frame = viewBounds
+        }
     }
 }
 

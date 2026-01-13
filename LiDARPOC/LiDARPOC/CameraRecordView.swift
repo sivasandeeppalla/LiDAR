@@ -456,8 +456,15 @@ class CameraManager: NSObject, ObservableObject {
             ]
             
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-            // ✅ THIS IS MANDATORY FOR PORTRAIT
-            input.transform = CGAffineTransform(rotationAngle: .pi / 2)
+            // IMPORTANT:
+            // Do NOT rotate the recorded video via `input.transform`.
+            // ARKit depth maps + camera intrinsics are serialized in the sensor's native (landscape) orientation.
+            // If we rotate only the video (metadata transform), video frames become portrait for many decoders,
+            // while depth/intrinsics remain landscape → orientation mismatch → incorrect 3D reconstruction.
+            //
+            // If you want portrait playback in the UI, rotate only at display time (player layer/view),
+            // not in the recorded file that must align with depth.
+            input.transform = .identity
 
             input.expectsMediaDataInRealTime = true
             

@@ -19,6 +19,7 @@ struct Model3DViewerView: View {
     @State private var showClearAlert = false
     @State private var loadError: String?
     @State private var isDownloading = false
+    @State private var downloadProgress: Double = 0.0
     @State private var downloadedModelURL: URL?
     @State private var loadedModelNode: SCNNode?
     @State private var isModelLoading: Bool = false
@@ -37,10 +38,10 @@ struct Model3DViewerView: View {
                     // Downloading state
                     if isDownloading {
                         VStack(spacing: 20) {
-                            ProgressView()
-                                .scaleEffect(1.5)
-                                .tint(.white)
-                            Text("Downloading 3D model...")
+                            ProgressView(value: downloadProgress, total: 1.0)
+                                .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                                .frame(width: 200)
+                            Text("Downloading 3D model... \(Int(downloadProgress * 100))%")
                                 .font(.headline)
                                 .foregroundColor(.white)
                         }
@@ -167,7 +168,7 @@ struct Model3DViewerView: View {
                     .padding()
                     .background(Color.black.opacity(0.7))
                 }
-              
+                
             }
             .navigationTitle("3D Model Viewer")
             .navigationBarTitleDisplayMode(.inline)
@@ -199,6 +200,10 @@ struct Model3DViewerView: View {
                     loadModelAsync(url: url)
                 }
             }
+            .onDisappear {
+                // Ensure auto-lock is re-enabled when leaving the view
+                UIApplication.shared.isIdleTimerDisabled = false
+            }
         }
     }
     
@@ -211,10 +216,18 @@ struct Model3DViewerView: View {
         
         isDownloading = true
         loadError = nil
+        downloadProgress = 0.0
         
-        apiService.downloadFile(fileId: fileId, fileType: "processed") { result in
+        // Disable auto-lock while downloading
+        UIApplication.shared.isIdleTimerDisabled = true
+        
+        apiService.downloadFile(fileId: fileId, fileType: "processed", progress: { progress in
+            self.downloadProgress = progress
+        }) { result in
             DispatchQueue.main.async {
                 isDownloading = false
+                // Re-enable auto-lock
+                UIApplication.shared.isIdleTimerDisabled = false
                 
                 switch result {
                 case .success(let url):
@@ -394,6 +407,7 @@ struct Model3DViewerView: View {
         
         return nil
     }
+        
 }
 
 struct Measurement {

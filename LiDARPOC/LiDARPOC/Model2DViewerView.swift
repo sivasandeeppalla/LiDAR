@@ -8,19 +8,22 @@
 import SwiftUI
 
 struct Model2DViewerView: View {
+
     enum ViewState {
         case initial
         case processed
+        case swapMode
     }
 
     let image: UIImage
     let fileId: String
-    @Environment(\.dismiss) var dismiss
-    @State var viewState: ViewState = .initial
 
+    @Environment(\.dismiss) var dismiss
+
+    @State private var viewState: ViewState = .initial
     @State private var tapLocation: CGPoint = .zero
-    @State private var normalizedTapLocation: CGPoint = .zero
     @State private var imageSize: CGSize = .zero
+    @State private var pixelTapLocation: CGPoint = .zero
 
     @State private var isProcessing = false
     @State private var alertMessage = ""
@@ -29,10 +32,12 @@ struct Model2DViewerView: View {
     @State private var assignedImage: UIImage?
     @State private var boundingBox: APIService.Box?
     @State private var rotatedBbox: [APIService.SwapPointsRequest]?
+    @State private var refinedBox: [APIService.SwapPointsRequest]?
+
     @State private var measurements: APIService.MeasurementResponse?
-    @State private var pixelTapLocation: CGPoint = .zero
-    @State private var ackroImageBase64: String = ""
-    @State private var swapImageBase64: String = ""
+
+    @State private var ackroImageBase64 = ""
+    @State private var swapImageBase64 = ""
 
     var displayedImage: UIImage {
         assignedImage ?? image
@@ -43,154 +48,110 @@ struct Model2DViewerView: View {
             Color.black.ignoresSafeArea()
 
             VStack {
-                // Top bar
+
+                // MARK: - Top bar
                 HStack {
                     Spacer()
-                    Button(action: { dismiss() }) {
+                    Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 30))
                             .foregroundColor(.white)
-                            .background(Color.black.opacity(0.3))
-                            .clipShape(Circle())
                     }
                     .padding()
                 }
 
                 Spacer()
 
-                GeometryReader { geometry in
-                    ZStack {
-                        Image(uiImage: displayedImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .background(
-                                GeometryReader { imageGeo in
-                                    Color.clear
-                                        .onAppear { imageSize = imageGeo.size }
-                                        .onChange(of: imageGeo.size) { imageSize = $0 }
-                                }
-                            )
-
-                            // 🔴 ROTATED BOUNDING BOX OVERLAY
-                            .overlay(
-                                GeometryReader { geo in
-                                    ZStack {
-                                        if let points = rotatedBbox,
-                                           points.count == 4,
-                                           let cgImage = displayedImage.cgImage {
-
-                                            let viewSize = geo.size
-                                            let imgWidth = CGFloat(cgImage.width)
-                                            let imgHeight = CGFloat(cgImage.height)
-
-                                            let scaleX = viewSize.width / imgWidth
-                                            let scaleY = viewSize.height / imgHeight
-
-                                            // Convert image-pixel points → view points
-                                            let viewPoints: [CGPoint] = points.map {
-                                                CGPoint(
-                                                    x: CGFloat($0.x) * scaleX,
-                                                    y: CGFloat($0.y) * scaleY
-                                                )
-                                            }
-
-                                            // Draw polygon
-                                            Path { path in
-                                                path.move(to: viewPoints[0])
-                                                for i in 1..<viewPoints.count {
-                                                    path.addLine(to: viewPoints[i])
-                                                }
-                                                path.closeSubpath()
-                                            }
-                                            .stroke(Color.green, lineWidth: 2)
-
-                                            // Draggable corner points
-                                            ForEach(viewPoints.indices, id: \.self) { index in
-                                                Circle()
-                                                    .fill(Color.green)
-                                                    .frame(width: 14, height: 14)
-                                                    .position(viewPoints[index])
-                                                    .gesture(
-                                                        DragGesture()
-                                                            .onChanged { value in
-                                                                updateRotatedPoint(
-                                                                    index: index,
-                                                                    viewLocation: value.location,
-                                                                    viewSize: viewSize,
-                                                                    imageSize: CGSize(width: imgWidth, height: imgHeight)
-                                                                )
-                                                            }
-                                                    )
-                                            }
-                                        }
-                                    }
-                                }
-                            )
-
-                            // Tap overlay
-                            .overlay(
+                // MARK: - Image + Box
+                GeometryReader { outerGeo in
+                    Image(uiImage: displayedImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .background(
+                            GeometryReader { imgGeo in
                                 Color.clear
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { location in
-                                        handleTap(at: location)
-                                    }
-                            )
-                    }
+                                    .onAppear { imageSize = imgGeo.size }
+                                    .onChange(of: imgGeo.size) { imageSize = $0 }
+                            }
+                        )
+
+                        // 🔴 Rotated draggable box
+                        .overlay(
+                            GeometryReader { geo in
+                                ZStack {
+                                    drawRotatedBoundingBox(geo: geo)
+                                }
+                            }
+                        )
+
+                        // 👆 Tap anywhere
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 0)
+                                .onEnded { value in
+                                    handleTap(at: value.location)
+                                }
+                        )
                 }
 
                 Spacer()
 
+                // MARK: - Bottom panel
                 VStack {
                     switch viewState {
+
                     case .initial:
-                        Text("View Point: (\(Int(tapLocation.x)), \(Int(tapLocation.y)))")
-                            .foregroundColor(.gray)
-
                         Text("Image Point: (\(Int(pixelTapLocation.x)), \(Int(pixelTapLocation.y)))")
-                            .font(.headline)
                             .foregroundColor(.green)
-
-                        Text("Image Size: \(Int(imageSize.width)) x \(Int(imageSize.height))")
-                            .font(.caption)
-                            .foregroundColor(.gray)
 
                         if isProcessing {
                             ProgressView("Processing...")
                                 .tint(.white)
                         } else {
-                            Button {
+                            Button("Process Image") {
                                 getAkroProcessImage()
-                            } label: {
-                                Text("Process Image")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 10)
-                                    .background(Color.blue)
-                                    .cornerRadius(8)
                             }
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
                             .disabled(tapLocation == .zero)
-                            .opacity(tapLocation == .zero ? 0.5 : 1)
                         }
 
                     case .processed:
-                        if let width_cm = measurements?.width_cm {
-                            Text(String(format: "Width(cms): %.2f", width_cm))
+                        if let w = measurements?.width_cm {
+                            Text(String(format: "Width: %.2f cm", w))
                                 .foregroundColor(.green)
                         }
-
-                        if let height_cm = measurements?.height_cm {
-                            Text(String(format: "Height(cms): %.2f", height_cm))
+                        if let h = measurements?.height_cm {
+                            Text(String(format: "Height: %.2f cm", h))
                                 .foregroundColor(.green)
                         }
+                        
+                        if isProcessing {
+                            ProgressView("Processing...")
+                                .tint(.white)
+                        } else {
+                            Button("Adjust Image") {
+                                debugPrint("rotated Box is \(rotatedBbox)")
 
+                                debugPrint("Refined Box is \(refinedBox)")
+                                getAkroAdjestedProcessImage()
+                            }
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                            .disabled(tapLocation == .zero)
+                        }
+                       
+                    case .swapMode:
                         swapImagesView()
                     }
                 }
                 .padding()
-                .background(Color.black.opacity(0.5))
-                .cornerRadius(10)
-                .padding(.bottom, 20)
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(12)
+                .padding(.bottom)
             }
         }
         .alert(isPresented: $showAlert) {
@@ -202,108 +163,64 @@ struct Model2DViewerView: View {
         }
     }
 
-    // MARK: - Helpers (UNCHANGED)
-
-    private func handleTap(at location: CGPoint) {
-        tapLocation = location
-
-        if imageSize.width > 0, imageSize.height > 0 {
-            let normalizedX = location.x / imageSize.width
-            let normalizedY = location.y / imageSize.height
-
-            if let cgImage = displayedImage.cgImage {
-                pixelTapLocation = CGPoint(
-                    x: normalizedX * CGFloat(cgImage.width),
-                    y: normalizedY * CGFloat(cgImage.height)
-                )
-            }
-        }
-    }
-
-    func getAkroProcessImage() {
-        guard tapLocation != .zero else { return }
-        isProcessing = true
-
-        APIService.shared.processArucoMarkerImage(
-            image: image,
-            clickPoint: pixelTapLocation,
-            fileId: fileId
-        ) { result in
-            DispatchQueue.main.async {
-                self.isProcessing = false
-                switch result {
-                case .success(let response):
-                    if let data = Data(base64Encoded: response.image),
-                       let newImage = UIImage(data: data) {
-                        self.assignedImage = newImage
-                        self.ackroImageBase64 = response.image
-                    }
-                    self.boundingBox = response.prediction?.box
-                    self.rotatedBbox = response.prediction?.rotated_bbox
-                    self.measurements = response.measurement
-                    self.viewState = .processed
-                    self.alertMessage = "Processing successful!"
-                    self.showAlert = true
-
-                case .failure(let error):
-                    self.alertMessage = error.localizedDescription
-                    self.showAlert = true
-                }
-            }
-        }
-    }
+    // MARK: - Rotated Bounding Box (DRAGGABLE)
 
     @ViewBuilder
-    private func swapImagesView() -> some View {
-        let doors = (0...9).map { "door_\($0)" }
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(doors, id: \.self) { name in
-                    Button {
-                        if let image = UIImage(named: name),
-                           let data = image.jpegData(compressionQuality: 0.8) {
-                            swapAckroImage(swapBase64: data.base64EncodedString())
-                        }
-                    } label: {
-                        Image(name)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 90, height: 150)
-                            .clipped()
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.white, lineWidth: 1)
-                            )
-                    }
-                }
+    private func drawRotatedBoundingBox(geo: GeometryProxy) -> some View {
+        if let points = refinedBox,
+           points.count == 4,
+           let cgImage = displayedImage.cgImage {
+
+            let viewSize = geo.size
+            let imgWidth = CGFloat(cgImage.width)
+            let imgHeight = CGFloat(cgImage.height)
+
+            let scaleX = viewSize.width / imgWidth
+            let scaleY = viewSize.height / imgHeight
+
+            let viewPoints = points.map {
+                CGPoint(
+                    x: CGFloat($0.x) * scaleX,
+                    y: CGFloat($0.y) * scaleY
+                )
             }
-            .padding(.horizontal, 12)
+
+            // Box lines
+            Path { path in
+                path.move(to: viewPoints[0])
+                for i in 1..<viewPoints.count {
+                    path.addLine(to: viewPoints[i])
+                }
+                path.closeSubpath()
+            }
+            .stroke(Color.green, lineWidth: 2)
+
+            // Draggable corners
+            ForEach(viewPoints.indices, id: \.self) { index in
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Circle())
+                    .position(viewPoints[index])
+                    .highPriorityGesture(
+                        DragGesture()
+                            .onChanged { value in
+                                if viewState == .processed {
+                                    updateRotatedPoint(
+                                        index: index,
+                                        viewLocation: value.location,
+                                        viewSize: viewSize,
+                                        imageSize: CGSize(width: imgWidth, height: imgHeight)
+                                    )
+                                }
+                            }
+                    )
+            }
         }
     }
 
-    func swapAckroImage(swapBase64: String) {
-        guard !ackroImageBase64.isEmpty,
-              let points = rotatedBbox else { return }
+    // MARK: - Helpers
 
-        isProcessing = true
-
-        APIService.shared.processSwapImage(
-            inputImage: ackroImageBase64,
-            swapImage: swapBase64,
-            points: points
-        ) { result in
-            DispatchQueue.main.async {
-                self.isProcessing = false
-                if case .success(let response) = result,
-                   let image = response.image_1,
-                   let data = Data(base64Encoded: image) {
-                    self.assignedImage = UIImage(data: data)
-                }
-            }
-        }
-    }
-    
     private func updateRotatedPoint(
         index: Int,
         viewLocation: CGPoint,
@@ -315,18 +232,151 @@ struct Model2DViewerView: View {
         let scaleX = imageSize.width / viewSize.width
         let scaleY = imageSize.height / viewSize.height
 
-        // Convert view → image pixel coordinates
         let pixelX = max(0, min(viewLocation.x * scaleX, imageSize.width))
         let pixelY = max(0, min(viewLocation.y * scaleY, imageSize.height))
 
-        rotatedBbox?[index] = APIService.SwapPointsRequest(
+        refinedBox?[index] = APIService.SwapPointsRequest(
             x: Double(pixelX),
             y: Double(pixelY)
         )
     }
+
+    private func handleTap(at location: CGPoint) {
+        tapLocation = location
+
+        if let cgImage = displayedImage.cgImage,
+           imageSize.width > 0,
+           imageSize.height > 0 {
+
+            let nx = location.x / imageSize.width
+            let ny = location.y / imageSize.height
+
+            pixelTapLocation = CGPoint(
+                x: nx * CGFloat(cgImage.width),
+                y: ny * CGFloat(cgImage.height)
+            )
+        }
+    }
+
+    // MARK: - API Calls (unchanged)
+
+    func getAkroProcessImage() {
+        isProcessing = true
+
+        APIService.shared.processArucoMarkerImage(
+            image: image,
+            clickPoint: pixelTapLocation,
+            fileId: fileId
+        ) { result in
+            DispatchQueue.main.async {
+                self.isProcessing = false
+
+                switch result {
+                case .success(let response):
+                    if let data = Data(base64Encoded: response.image),
+                       let img = UIImage(data: data) {
+                        assignedImage = img
+                        ackroImageBase64 = response.image
+                    }
+
+                    rotatedBbox = response.prediction?.rotated_bbox
+                    refinedBox = response.prediction?.rotated_bbox
+                    measurements = response.measurement
+                    viewState = .processed
+                    alertMessage = "Processing successful"
+                    showAlert = true
+
+                case .failure(let error):
+                    alertMessage = error.localizedDescription
+                    showAlert = true
+                }
+            }
+        }
+    }
+
+    func getAkroAdjestedProcessImage() {
+        isProcessing = true
+        APIService.shared.redefinedAkroImage(
+            image: image,
+            adjustedPoints: refinedBox ?? [],
+            fileId: fileId
+        ) { result in
+            DispatchQueue.main.async {
+                self.isProcessing = false
+                switch result {
+                case .success(let response):
+                    if let data = Data(base64Encoded: response.image),
+                       let img = UIImage(data: data) {
+                        assignedImage = img
+                        ackroImageBase64 = response.image
+                    }
+                    rotatedBbox = response.prediction?.rotated_bbox
+                    refinedBox = response.prediction?.rotated_bbox
+                    measurements = response.measurement
+                    viewState = .swapMode
+                    alertMessage = "Processing successful"
+                    showAlert = true
+
+                case .failure(let error):
+                    alertMessage = error.localizedDescription
+                    showAlert = true
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func swapImagesView() -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                ForEach((0...9).map { "door_\($0)" }, id: \.self) { name in
+                    Button {
+                        if let img = UIImage(named: name),
+                           let data = img.jpegData(compressionQuality: 0.8) {
+                            swapAckroImage(swapBase64: data.base64EncodedString())
+                        }
+                    } label: {
+                        Image(name)
+                            .resizable()
+                            .frame(width: 90, height: 140)
+                            .cornerRadius(8)
+                    }
+                }
+            }
+        }
+    }
+
+    func swapAckroImage(swapBase64: String) {
+        guard let points = rotatedBbox else { return }
+
+        APIService.shared.processSwapImage(
+            inputImage: ackroImageBase64,
+            swapImage: swapBase64,
+            points: points
+        ) { result in
+            DispatchQueue.main.async {
+                self.isProcessing = false
+                switch result {
+                case .success(let response):
+                    print("✅ Swap success")
+                    if let image = response.image_1, let data = Data(base64Encoded: image),
+                       let newImage = UIImage(data: data) {
+                        self.assignedImage = newImage
+                    }
+                case .failure(let error):
+                    print("❌ Swap failed: \(error.localizedDescription)")
+                    self.alertMessage = "Swap Error: \(error.localizedDescription)"
+                    self.showAlert = true
+                }
+            }
+        }
+    }
 }
 
 #Preview {
-    Model2DViewerView(image: UIImage(systemName: "photo")!, fileId: "")
+    Model2DViewerView(
+        image: UIImage(systemName: "photo")!,
+        fileId: ""
+    )
 }
 

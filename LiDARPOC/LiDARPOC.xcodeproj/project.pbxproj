@@ -3,33 +3,52 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		10B9F89C904943909366801A /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690000755DF04624B71E177E /* WelcomeView.swift */; };
+		16E7F9DA1EBE40539360355D /* LiDARPOCApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8DFC938CB8341AF9549D70B /* LiDARPOCApp.swift */; };
+		18F12C70F3254B5D8DB1B081 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D284F553AC546509F7ED8B0 /* APIService.swift */; };
+		2E515C597C9649089B7C50CF /* CorrectionUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F38E193228407ABE808E22 /* CorrectionUtil.swift */; };
+		2EB1FEAC6B464294AC14491E /* RecordingsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88DBDF6802F74591A5A451F6 /* RecordingsListView.swift */; };
+		3633B044FABF4A34A378863D /* Model3DViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72AE01CDFC546B2BCD029BE /* Model3DViewerView.swift */; };
+		3E6A247AFF6F4C3FB835BAC4 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A23CE8E2624DF59B63F2FC /* PlayerView.swift */; };
+		7135B3B668FE46F39A20034D /* DepthDataModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF560D8786B4433598C4FF8C /* DepthDataModel.swift */; };
+		71830B6FCD8543858D03F08C /* Model2DViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46C77D4F2DFE4FEE9C817001 /* Model2DViewerView.swift */; };
+		728D0888B57F4A4899A511CD /* VideoPlaybackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 799BC2C1415B4498BB503D44 /* VideoPlaybackView.swift */; };
+		75CDF0E16E06420BAC715385 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1FA7FD367464CF78039414E /* Assets.xcassets */; };
+		7C64981014944FE89AE2281B /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9BCC0F5B6B0643D194081118 /* Preview Assets.xcassets */; };
+		7D2A2BEB21784DD1B08E75A1 /* URL+Identifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99F71508B11446608946762F /* URL+Identifiable.swift */; };
+		85475A722F13890800FD2044 /* animation.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 85475A6F2F13890800FD2044 /* animation.mp4 */; };
+		85475A732F13890800FD2044 /* lidar.obj in Resources */ = {isa = PBXBuildFile; fileRef = 85475A702F13890800FD2044 /* lidar.obj */; };
+		A83C91E9211D4A008F752953 /* DownloadedVideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B36B1D044F4DB1BD344D08 /* DownloadedVideoPlayerView.swift */; };
+		B460376B4A524239A6C73EEC /* CameraRecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E5B86C67824C55902EF1DC /* CameraRecordView.swift */; };
+		ED494817A4D545F6A0BF3E5F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50FD268852244E60B55DEEAE /* ContentView.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		1663B63E73964A9EA90649E0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		3D284F553AC546509F7ED8B0 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
+		46C77D4F2DFE4FEE9C817001 /* Model2DViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Model2DViewerView.swift; sourceTree = "<group>"; };
+		50FD268852244E60B55DEEAE /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		51A23CE8E2624DF59B63F2FC /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
+		53E5B86C67824C55902EF1DC /* CameraRecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraRecordView.swift; sourceTree = "<group>"; };
+		690000755DF04624B71E177E /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		799BC2C1415B4498BB503D44 /* VideoPlaybackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlaybackView.swift; sourceTree = "<group>"; };
+		85475A6F2F13890800FD2044 /* animation.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = animation.mp4; sourceTree = "<group>"; };
+		85475A702F13890800FD2044 /* lidar.obj */ = {isa = PBXFileReference; lastKnownFileType = text; path = lidar.obj; sourceTree = "<group>"; };
 		8552E4622EED38750063C5D8 /* LiDARPOC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiDARPOC.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		88DBDF6802F74591A5A451F6 /* RecordingsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingsListView.swift; sourceTree = "<group>"; };
+		99F71508B11446608946762F /* URL+Identifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+Identifiable.swift"; sourceTree = "<group>"; };
+		9BCC0F5B6B0643D194081118 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		A1FA7FD367464CF78039414E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A6F38E193228407ABE808E22 /* CorrectionUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionUtil.swift; sourceTree = "<group>"; };
+		A9B36B1D044F4DB1BD344D08 /* DownloadedVideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadedVideoPlayerView.swift; sourceTree = "<group>"; };
+		D8DFC938CB8341AF9549D70B /* LiDARPOCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiDARPOCApp.swift; sourceTree = "<group>"; };
+		DF560D8786B4433598C4FF8C /* DepthDataModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepthDataModel.swift; sourceTree = "<group>"; };
+		E72AE01CDFC546B2BCD029BE /* Model3DViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Model3DViewerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		859D32B52EF1C5570056592B /* Exceptions for "LiDARPOC" folder in "LiDARPOC" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 8552E4612EED38750063C5D8 /* LiDARPOC */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		8552E4642EED38750063C5D8 /* LiDARPOC */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				859D32B52EF1C5570056592B /* Exceptions for "LiDARPOC" folder in "LiDARPOC" target */,
-			);
-			path = LiDARPOC;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		8552E45F2EED38750063C5D8 /* Frameworks */ = {
@@ -42,6 +61,31 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		292F19B5B38640508FEDD56F /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				9BCC0F5B6B0643D194081118 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		6BD3E02114D6474A95465A78 /* SupportingClass */ = {
+			isa = PBXGroup;
+			children = (
+				51A23CE8E2624DF59B63F2FC /* PlayerView.swift */,
+			);
+			path = SupportingClass;
+			sourceTree = "<group>";
+		};
+		85475A712F13890800FD2044 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				85475A6F2F13890800FD2044 /* animation.mp4 */,
+				85475A702F13890800FD2044 /* lidar.obj */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		8552E4592EED38750063C5D8 = {
 			isa = PBXGroup;
 			children = (
@@ -56,6 +100,31 @@
 				8552E4622EED38750063C5D8 /* LiDARPOC.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		8552E4642EED38750063C5D8 /* LiDARPOC */ = {
+			isa = PBXGroup;
+			children = (
+				85475A712F13890800FD2044 /* Resources */,
+				292F19B5B38640508FEDD56F /* Preview Content */,
+				6BD3E02114D6474A95465A78 /* SupportingClass */,
+				3D284F553AC546509F7ED8B0 /* APIService.swift */,
+				53E5B86C67824C55902EF1DC /* CameraRecordView.swift */,
+				50FD268852244E60B55DEEAE /* ContentView.swift */,
+				A6F38E193228407ABE808E22 /* CorrectionUtil.swift */,
+				DF560D8786B4433598C4FF8C /* DepthDataModel.swift */,
+				A9B36B1D044F4DB1BD344D08 /* DownloadedVideoPlayerView.swift */,
+				1663B63E73964A9EA90649E0 /* Info.plist */,
+				D8DFC938CB8341AF9549D70B /* LiDARPOCApp.swift */,
+				46C77D4F2DFE4FEE9C817001 /* Model2DViewerView.swift */,
+				E72AE01CDFC546B2BCD029BE /* Model3DViewerView.swift */,
+				88DBDF6802F74591A5A451F6 /* RecordingsListView.swift */,
+				99F71508B11446608946762F /* URL+Identifiable.swift */,
+				799BC2C1415B4498BB503D44 /* VideoPlaybackView.swift */,
+				690000755DF04624B71E177E /* WelcomeView.swift */,
+				A1FA7FD367464CF78039414E /* Assets.xcassets */,
+			);
+			path = LiDARPOC;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -73,12 +142,7 @@
 			);
 			dependencies = (
 			);
-			fileSystemSynchronizedGroups = (
-				8552E4642EED38750063C5D8 /* LiDARPOC */,
-			);
 			name = LiDARPOC;
-			packageProductDependencies = (
-			);
 			productName = LiDARPOC;
 			productReference = 8552E4622EED38750063C5D8 /* LiDARPOC.app */;
 			productType = "com.apple.product-type.application";
@@ -90,15 +154,11 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1610;
-				LastUpgradeCheck = 1610;
-				TargetAttributes = {
-					8552E4612EED38750063C5D8 = {
-						CreatedOnToolsVersion = 16.1;
-					};
-				};
+				LastSwiftUpdateCheck = 1520;
+				LastUpgradeCheck = 1520;
 			};
 			buildConfigurationList = 8552E45D2EED38750063C5D8 /* Build configuration list for PBXProject "LiDARPOC" */;
+			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -107,7 +167,6 @@
 			);
 			mainGroup = 8552E4592EED38750063C5D8;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			productRefGroup = 8552E4632EED38750063C5D8 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -122,6 +181,10 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				75CDF0E16E06420BAC715385 /* Assets.xcassets in Resources */,
+				7C64981014944FE89AE2281B /* Preview Assets.xcassets in Resources */,
+				85475A722F13890800FD2044 /* animation.mp4 in Resources */,
+				85475A732F13890800FD2044 /* lidar.obj in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -132,6 +195,20 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				18F12C70F3254B5D8DB1B081 /* APIService.swift in Sources */,
+				B460376B4A524239A6C73EEC /* CameraRecordView.swift in Sources */,
+				ED494817A4D545F6A0BF3E5F /* ContentView.swift in Sources */,
+				2E515C597C9649089B7C50CF /* CorrectionUtil.swift in Sources */,
+				7135B3B668FE46F39A20034D /* DepthDataModel.swift in Sources */,
+				A83C91E9211D4A008F752953 /* DownloadedVideoPlayerView.swift in Sources */,
+				16E7F9DA1EBE40539360355D /* LiDARPOCApp.swift in Sources */,
+				71830B6FCD8543858D03F08C /* Model2DViewerView.swift in Sources */,
+				3633B044FABF4A34A378863D /* Model3DViewerView.swift in Sources */,
+				2EB1FEAC6B464294AC14491E /* RecordingsListView.swift in Sources */,
+				7D2A2BEB21784DD1B08E75A1 /* URL+Identifiable.swift in Sources */,
+				728D0888B57F4A4899A511CD /* VideoPlaybackView.swift in Sources */,
+				10B9F89C904943909366801A /* WelcomeView.swift in Sources */,
+				3E6A247AFF6F4C3FB835BAC4 /* PlayerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -190,7 +267,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -247,7 +324,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -264,9 +341,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"LiDARPOC/Preview Content\"";
-				DEVELOPMENT_TEAM = WU7L9KSQA2;
+				DEVELOPMENT_TEAM = G5QF7CKH9C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiDARPOC/Info.plist;
@@ -283,7 +360,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.test.sampleLiDAR;
+				PRODUCT_BUNDLE_IDENTIFIER = com.milao.LiDAR;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -299,9 +376,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"LiDARPOC/Preview Content\"";
-				DEVELOPMENT_TEAM = WU7L9KSQA2;
+				DEVELOPMENT_TEAM = G5QF7CKH9C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiDARPOC/Info.plist;
@@ -318,7 +395,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.test.sampleLiDAR;
+				PRODUCT_BUNDLE_IDENTIFIER = com.milao.LiDAR;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;

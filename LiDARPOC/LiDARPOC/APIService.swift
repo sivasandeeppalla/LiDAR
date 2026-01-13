@@ -55,13 +55,28 @@ struct UploadedFilesResponse: Codable {
     let files: [UploadedFile]?
 }
 
-class APIService: ObservableObject {
+class APIService: NSObject, ObservableObject, URLSessionDownloadDelegate {
     static let shared = APIService()
     
     private let baseURL = "http://106.51.37.159:8001"
     private let historyDownloadsFolderName = "HistoryDownloads"
     
-    private init() {
+    private var downloadProgressHandlers: [Int: (Double) -> Void] = [:]
+    private var downloadCompletionHandlers: [Int: (Result<URL, Error>) -> Void] = [:]
+    private var downloadTaskToFileType: [Int: String] = [:]
+    private var downloadTaskToFileId: [Int: String] = [:]
+    
+    // Upload progress (tracked via URLSessionTask.progress)
+    private var uploadProgressHandlers: [Int: (Double) -> Void] = [:]
+    private var uploadProgressObservations: [Int: NSKeyValueObservation] = [:]
+    
+    private lazy var session: URLSession = {
+        let config = URLSessionConfiguration.default
+        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }()
+    
+    private override init() {
+        super.init()
         // Ensure history downloads folder exists on initialization
         ensureHistoryDownloadsFolder()
     }
@@ -144,8 +159,9 @@ class APIService: ObservableObject {
     /// - Parameters:
     ///   - videoURL: URL of the video file to upload
     ///   - jsonURL: URL of the JSON file to upload
+    ///   - progress: Upload progress callback (0.0 - 1.0)
     ///   - completion: Completion handler with result containing response string or error
-    func uploadFiles(videoURL: URL, jsonURL: URL, completion: @escaping (Result<String, Error>) -> Void) {
+    func uploadFiles(videoURL: URL, jsonURL: URL, progress: ((Double) -> Void)? = nil, completion: @escaping (Result<String, Error>) -> Void) {
         guard FileManager.default.fileExists(atPath: videoURL.path) else {
             completion(.failure(NSError(domain: "APIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Video file not found"])))
             return
@@ -190,10 +206,19 @@ class APIService: ObservableObject {
         
         // Use uploadTask with file URL for memory-efficient streaming upload
         let session = URLSession(configuration: .default)
-        let task = session.uploadTask(with: request, fromFile: multipartBodyURL) { data, response, error in
+        var task: URLSessionUploadTask?
+        task = session.uploadTask(with: request, fromFile: multipartBodyURL) { [weak self] data, response, error in
+            guard let self = self else { return }
             // Clean up temporary files
             try? FileManager.default.removeItem(at: tempJSONURL)
             try? FileManager.default.removeItem(at: multipartBodyURL)
+            
+            // Clean up upload progress tracking
+            if let taskId = task?.taskIdentifier {
+                self.uploadProgressObservations[taskId]?.invalidate()
+                self.uploadProgressObservations.removeValue(forKey: taskId)
+                self.uploadProgressHandlers.removeValue(forKey: taskId)
+            }
             
             if let error = error {
                 completion(.failure(error))
@@ -215,6 +240,33 @@ class APIService: ObservableObject {
             } else {
                 completion(.success("Upload successful (no response data)"))
             }
+        }
+        
+        guard let task = task else {
+            // Clean up temp JSON file and multipart body file
+            try? FileManager.default.removeItem(at: tempJSONURL)
+            try? FileManager.default.removeItem(at: multipartBodyURL)
+            completion(.failure(NSError(domain: "APIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create upload task"])))
+            return
+        }
+        
+        // Track upload progress (0.0 - 1.0)
+        if let progressHandler = progress {
+            uploadProgressHandlers[task.taskIdentifier] = progressHandler
+            DispatchQueue.main.async {
+                progressHandler(0.0)
+            }
+            
+            let observation = task.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] p, _ in
+                guard let self = self else { return }
+                let frac = min(max(p.fractionCompleted, 0.0), 1.0)
+                if let handler = self.uploadProgressHandlers[task.taskIdentifier] {
+                    DispatchQueue.main.async {
+                        handler(frac)
+                    }
+                }
+            }
+            uploadProgressObservations[task.taskIdentifier] = observation
         }
         
         task.resume()
@@ -521,9 +573,10 @@ class APIService: ObservableObject {
     
     /// Download processed file (.obj) from server
     /// First checks cache, only downloads if not cached
-    func downloadFile(fileId: String, fileType: String = "processed", completion: @escaping (Result<URL, Error>) -> Void) {
+    func downloadFile(fileId: String, fileType: String = "processed", progress: ((Double) -> Void)? = nil, completion: @escaping (Result<URL, Error>) -> Void) {
         // Check cache first
         if let cachedFile = getCachedFile(fileId: fileId, fileType: fileType) {
+            progress?(1.0)
             completion(.success(cachedFile))
             return
         }
@@ -540,47 +593,85 @@ class APIService: ObservableObject {
         
         print("📥 Downloading file: \(fileId).\(fileType == "processed" ? "obj" : "mov")")
         
-        let task = URLSession.shared.downloadTask(with: request) { localURL, response, error in
-            if let error = error {
-                completion(.failure(error))
-                return
+        let task = session.downloadTask(with: request)
+        
+        // Store handlers
+        downloadProgressHandlers[task.taskIdentifier] = progress
+        downloadCompletionHandlers[task.taskIdentifier] = completion
+        downloadTaskToFileType[task.taskIdentifier] = fileType
+        downloadTaskToFileId[task.taskIdentifier] = fileId
+        
+        task.resume()
+    }
+    
+    // MARK: - URLSessionDownloadDelegate
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        if totalBytesExpectedToWrite > 0 {
+            let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            if let handler = downloadProgressHandlers[downloadTask.taskIdentifier] {
+                DispatchQueue.main.async {
+                    handler(progress)
+                }
             }
+        }
+    }
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let completion = downloadCompletionHandlers[downloadTask.taskIdentifier],
+              let fileType = downloadTaskToFileType[downloadTask.taskIdentifier],
+              let fileId = downloadTaskToFileId[downloadTask.taskIdentifier] else { return }
+        
+        // Clean up handlers (except completion call, cleaned after)
+        
+        // Move file (logic copied from original)
+        let historyFolder = self.getHistoryDownloadsFolder()
+        let extensionkey = fileType == "processed" ? "obj" : "mov"
+        let fileName = "\(fileId).\(extensionkey)"
+        let destinationURL = historyFolder.appendingPathComponent(fileName)
+        
+        do {
+            // Ensure folder exists
+            try? FileManager.default.createDirectory(at: historyFolder, withIntermediateDirectories: true)
             
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                completion(.failure(NSError(domain: "APIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])))
-                return
-            }
+            // Remove existing file if any
+            try? FileManager.default.removeItem(at: destinationURL)
             
-            guard let localURL = localURL else {
-                completion(.failure(NSError(domain: "APIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No file received"])))
-                return
-            }
+            // Move downloaded file to history folder
+            try FileManager.default.moveItem(at: location, to: destinationURL)
+            print("✅ Downloaded and cached file: \(fileName)")
             
-            // Move file to history downloads folder
-            let historyFolder = self.getHistoryDownloadsFolder()
-            let extensionkey = fileType == "processed" ? "obj" : "mov"
-            let fileName = "\(fileId).\(extensionkey)"
-            let destinationURL = historyFolder.appendingPathComponent(fileName)
-            
-            do {
-                // Ensure folder exists
-                try? FileManager.default.createDirectory(at: historyFolder, withIntermediateDirectories: true)
-                
-                // Remove existing file if any
-                try? FileManager.default.removeItem(at: destinationURL)
-                
-                // Move downloaded file to history folder
-                try FileManager.default.moveItem(at: localURL, to: destinationURL)
-                print("✅ Downloaded and cached file: \(fileName)")
+            // Clean up and callback
+            cleanupHandlers(for: downloadTask.taskIdentifier)
+            DispatchQueue.main.async {
                 completion(.success(destinationURL))
-            } catch {
-                print("❌ Error saving downloaded file: \(error.localizedDescription)")
+            }
+        } catch {
+            print("❌ Error saving downloaded file: \(error.localizedDescription)")
+            
+            // Clean up and callback
+            cleanupHandlers(for: downloadTask.taskIdentifier)
+            DispatchQueue.main.async {
                 completion(.failure(error))
             }
         }
-        
-        task.resume()
+    }
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error = error, let completion = downloadCompletionHandlers[task.taskIdentifier] {
+            // Only handle error here. Success is handled in didFinishDownloadingTo
+            cleanupHandlers(for: task.taskIdentifier)
+            DispatchQueue.main.async {
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    private func cleanupHandlers(for identifier: Int) {
+        downloadProgressHandlers.removeValue(forKey: identifier)
+        downloadCompletionHandlers.removeValue(forKey: identifier)
+        downloadTaskToFileType.removeValue(forKey: identifier)
+        downloadTaskToFileId.removeValue(forKey: identifier)
     }
     // MARK: - Aruco Marker Processing
     
@@ -592,6 +683,14 @@ class APIService: ObservableObject {
         let label: String?
         let marker_size_cm: Int?
     }
+    
+    struct ArucoRefinedRequestBody: Codable {
+        let image: String
+        let points: [SwapPointsRequest]
+        let record_id: String
+        let marker_size_cm: Int?
+    }
+    
     
     struct ArucoAPIResponse: Codable {
         let image: String // Base64
@@ -699,6 +798,79 @@ class APIService: ObservableObject {
             completion(.failure(error))
         }
     }
+    
+    
+    func redefinedAkroImage(image: UIImage, adjustedPoints: [SwapPointsRequest], fileId: String, completion: @escaping (Result<ArucoAPIResponse, Error>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/process_aruco_marker_image_refined") else {
+            completion(.failure(NSError(domain: "APIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+            return
+        }
+        
+        // Convert image to base64
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            completion(.failure(NSError(domain: "APIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"])))
+            return
+        }
+        let base64Image = imageData.base64EncodedString()
+        
+        let body = ArucoRefinedRequestBody(
+            image: base64Image,
+            points: adjustedPoints,
+            record_id: fileId,
+            marker_size_cm: nil // 5 s
+        )
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "accept")
+        
+        do {
+            let jsonData = try JSONEncoder().encode(body)
+            request.httpBody = jsonData
+            printJSON(jsonData, prefix: "📤 REQUEST BODY:")
+            
+            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    completion(.failure(NSError(domain: "APIService", code: statusCode, userInfo: [NSLocalizedDescriptionKey: "Server error: \(statusCode)"])))
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(.failure(NSError(domain: "APIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No data received"])))
+                    return
+                }
+                
+                self.printJSON(data, prefix: "📥 RAW RESPONSE:")
+                
+                
+                
+                do {
+                    let responseObj = try JSONDecoder().decode(ArucoAPIResponse.self, from: data)
+                    print("Success Response \(responseObj)")
+                    completion(.success(responseObj))
+                } catch {
+                    print("❌ Error decoding response: \(error)")
+                    // Try to print the string response for debugging
+                    if let str = String(data: data, encoding: .utf8) {
+                        print("Start of response: \(str.prefix(500))")
+                    }
+                    completion(.failure(error))
+                }
+            }
+            task.resume()
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
     
     func printJSON(_ data: Data, prefix: String = "") {
         if let json = try? JSONSerialization.jsonObject(with: data),
