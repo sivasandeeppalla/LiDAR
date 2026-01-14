@@ -38,6 +38,9 @@ struct Model2DViewerView: View {
 
     @State private var ackroImageBase64 = ""
     @State private var swapImageBase64 = ""
+    @State private var isDragging: Bool = false
+    @State private var dragLocation: CGPoint = .zero
+    @State private var resolvedView: UIView?
 
     var displayedImage: UIImage {
         assignedImage ?? image
@@ -79,7 +82,7 @@ struct Model2DViewerView: View {
                         .overlay(
                             GeometryReader { geo in
                                 ZStack {
-                                    drawRotatedBoundingBox(geo: geo)
+                                     drawRotatedBoundingBox(geo: geo)
                                 }
                             }
                         )
@@ -131,20 +134,40 @@ struct Model2DViewerView: View {
                             ProgressView("Processing...")
                                 .tint(.white)
                         } else {
-                            Button("Adjust Image") {
-                                debugPrint("rotated Box is \(rotatedBbox)")
+                            HStack {
+                                Button("Adjust Image") {
+                                    debugPrint("rotated Box is \(rotatedBbox)")
 
-                                debugPrint("Refined Box is \(refinedBox)")
-                                getAkroAdjestedProcessImage()
+                                    debugPrint("Refined Box is \(refinedBox)")
+                                    getAkroAdjestedProcessImage()
+                                }
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                                .disabled(tapLocation == .zero)
+                                
+                                Button("Swap Image") {
+                                    viewState = .swapMode
+                                }
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                                .disabled(tapLocation == .zero)
                             }
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                            .disabled(tapLocation == .zero)
+                           
                         }
                        
                     case .swapMode:
+                        if let w = measurements?.width_cm {
+                            Text(String(format: "Width: %.2f cm", w))
+                                .foregroundColor(.green)
+                        }
+                        if let h = measurements?.height_cm {
+                            Text(String(format: "Height: %.2f cm", h))
+                                .foregroundColor(.green)
+                        }
                         swapImagesView()
                     }
                 }
@@ -170,21 +193,21 @@ struct Model2DViewerView: View {
         if let points = refinedBox,
            points.count == 4,
            let cgImage = displayedImage.cgImage {
-
+            
             let viewSize = geo.size
             let imgWidth = CGFloat(cgImage.width)
             let imgHeight = CGFloat(cgImage.height)
-
+            
             let scaleX = viewSize.width / imgWidth
             let scaleY = viewSize.height / imgHeight
-
+            
             let viewPoints = points.map {
                 CGPoint(
                     x: CGFloat($0.x) * scaleX,
                     y: CGFloat($0.y) * scaleY
                 )
             }
-
+            
             // Box lines
             Path { path in
                 path.move(to: viewPoints[0])
@@ -193,12 +216,12 @@ struct Model2DViewerView: View {
                 }
                 path.closeSubpath()
             }
-            .stroke(Color.green, lineWidth: 2)
-
+            .stroke(Color.yellow, lineWidth: 3)
+            
             // Draggable corners
             ForEach(viewPoints.indices, id: \.self) { index in
                 Circle()
-                    .fill(Color.green)
+                    .stroke(Color.yellow, lineWidth: 5)
                     .frame(width: 24, height: 24)
                     .contentShape(Circle())
                     .position(viewPoints[index])
@@ -206,6 +229,8 @@ struct Model2DViewerView: View {
                         DragGesture()
                             .onChanged { value in
                                 if viewState == .processed {
+                                    isDragging = true
+                                    dragLocation = value.location
                                     updateRotatedPoint(
                                         index: index,
                                         viewLocation: value.location,
@@ -214,8 +239,31 @@ struct Model2DViewerView: View {
                                     )
                                 }
                             }
+                            .onEnded { _ in
+                                isDragging = false
+                            }
                     )
             }
+//           // 🔍 Magnifier
+//            if isDragging {
+//                DragMagnifierRepresentable(
+//                    point: dragLocation,
+//                    targetView: resolvedView ?? UIView()
+//                )
+//                .frame(width: 100, height: 100)
+//                .position(
+//                    x: dragLocation.x,
+//                    y: dragLocation.y - 120   // lift above finger
+//                )
+//            } else {
+//                UIKitViewResolver {
+//                    Image("sample_image")
+//                        .resizable()
+//                        .scaledToFit()
+//                } onResolve: { view in
+//                    self.resolvedView = view
+//                }
+//            }
         }
     }
 
@@ -311,9 +359,8 @@ struct Model2DViewerView: View {
                         ackroImageBase64 = response.image
                     }
                     rotatedBbox = response.prediction?.rotated_bbox
-                    refinedBox = response.prediction?.rotated_bbox
                     measurements = response.measurement
-                    viewState = .swapMode
+                    viewState = .processed
                     alertMessage = "Processing successful"
                     showAlert = true
 
@@ -380,3 +427,82 @@ struct Model2DViewerView: View {
     )
 }
 
+
+
+import UIKit
+
+final class DragMagnifierView: UIView {
+
+    private let magnification: CGFloat = 10.0   // 🔥 10× zoom
+    private let size: CGFloat = 100
+    private weak var targetView: UIView?
+
+    init(targetView: UIView) {
+        self.targetView = targetView
+        super.init(frame: CGRect(x: 0, y: 0, width: size, height: size))
+
+        layer.cornerRadius = size / 2
+        layer.borderWidth = 2
+        layer.borderColor = UIColor.white.cgColor
+        layer.masksToBounds = true
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(at point: CGPoint) {
+        guard let targetView else { return }
+
+        let renderer = UIGraphicsImageRenderer(size: bounds.size)
+        let image = renderer.image { ctx in
+            ctx.cgContext.translateBy(x: bounds.midX, y: bounds.midY)
+            ctx.cgContext.scaleBy(x: magnification, y: magnification)
+            ctx.cgContext.translateBy(x: -point.x, y: -point.y)
+
+            targetView.layer.render(in: ctx.cgContext)
+        }
+
+        layer.contents = image.cgImage
+    }
+}
+
+import SwiftUI
+
+struct DragMagnifierRepresentable: UIViewRepresentable {
+    let point: CGPoint
+    let targetView: UIView
+
+    func makeUIView(context: Context) -> DragMagnifierView {
+        DragMagnifierView(targetView: targetView)
+    }
+
+    func updateUIView(_ uiView: DragMagnifierView, context: Context) {
+        uiView.update(at: point)
+    }
+}
+
+struct UIKitViewResolver<Content: View>: UIViewRepresentable {
+    let content: Content
+    let onResolve: (UIView) -> Void
+
+    init(@ViewBuilder content: () -> Content, onResolve: @escaping (UIView) -> Void) {
+        self.content = content()
+        self.onResolve = onResolve
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let hosting = UIHostingController(rootView: content)
+        let view = hosting.view!
+        view.backgroundColor = .clear
+
+        DispatchQueue.main.async {
+            onResolve(view)
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+}
