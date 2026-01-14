@@ -199,8 +199,6 @@ struct DownloadedVideoPlayerView: View {
             }
         }
         .onDisappear {
-            // Ensure auto-lock is re-enabled when leaving the view
-            UIApplication.shared.isIdleTimerDisabled = false
             statusObserver?.invalidate()
             statusObserver = nil
             removeTimeObserver()
@@ -243,16 +241,11 @@ struct DownloadedVideoPlayerView: View {
         playerError = nil
         downloadProgress = 0.0
         
-        // Disable auto-lock while downloading
-        UIApplication.shared.isIdleTimerDisabled = true
-        
         apiService.downloadFile(fileId: fileId, fileType: "video", progress: { progress in
             self.downloadProgress = progress
         }) { result in
             DispatchQueue.main.async {
                 isDownloading = false
-                // Re-enable auto-lock
-                UIApplication.shared.isIdleTimerDisabled = false
                 
                 switch result {
                 case .success(let url):
